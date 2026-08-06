@@ -1,0 +1,55 @@
+# Публикация демо через GitHub Actions вместо старого Jekyll-конвейера.
+#
+# ЗАЧЕМ. 2026-08-06 старый конвейер деградировал именно на этом репозитории:
+# 26 сборок за день, 3 успешных, 23 упавших с длительностью 0 мс (то есть сборка
+# даже не начиналась), а успешные шли 261–906 с вместо обычных 30–50 с. При этом
+# GitHub Status показывал «All Systems Operational»: его страница старый Pages-билд
+# практически не покрывает, поэтому диагностировать можно было только по API.
+#
+# ЧТО МЕНЯЕТСЯ ДЛЯ РАБОТЫ. Ничего. Демо по-прежнему собирается локально
+# (`npm run build` в prototype-builder) и кладётся сюда готовыми файлами — этот
+# workflow просто публикует содержимое репозитория как есть. Jekyll не запускается
+# вовсе, поэтому и `.nojekyll` перестаёт быть значимым (оставлен на случай отката).
+#
+# ЧТО МЕНЯЕТСЯ ПО СУТИ: появляются видимые логи. Раньше отказ выглядел как
+# «Page build failed.» без единой подробности.
+#
+# ОТКАТ: Settings → Pages → Source вернуть на «Deploy from a branch».
+name: Публикация демо
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: {} # кнопка «Run workflow» — ручной перезапуск без коммита
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Параллельные публикации не нужны, но и обрывать начатую не будем:
+# cancel-in-progress: false, чтобы выкладка не осталась на полпути.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # Публикуем корень репозитория: здесь уже лежит собранный dist/
+      # (index.html + assets), исходников тут нет по замыслу — приватный код
+      # живёт в tavusqa/hr-platform и наружу не уходит.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
